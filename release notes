@@ -1,0 +1,24 @@
+Release Notes
+
+Title: ORD API XML Synchroniser
+Compatibility: Python 3.6 or later
+ORD XML Schema version: v2-0-0
+Status: Draft
+Author: NHS Digital
+Contact: exeter.helpdesk@nhs.net
+Release Date: 2018-11-20
+Project: ORD Changes (HSCOrgRefData)
+Internal Ref: v0.1
+Copyright Health and Social Care Information Centre (c) 2018
+
+Installation:
+Copy the ord-api-xml-sync.py and HeaderCodeSystems.txt to the same folder.
+
+Running the script:
+Call the script with the parameters:
+    URL to the sync endpoint of the ORD interface of the ODS API suite
+    Date from which you wish to retrieve updates
+Example call = python ord-api-xml-sync.py https://directory.spineservices.nhs.uk/ORD/2-0-0/sync 2018-11-08
+
+Note that the Python process must have write access in the folder where it runs in order to output the
+file and to log its actions.
