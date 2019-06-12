@@ -10,10 +10,10 @@ ORD XML Schema version: v2-0-0
 Status: Draft
 Author: NHS Digital
 Contact: exeter.helpdesk@nhs.net
-Release Date: 2018-11-20
+Release Date: 2019-06-12
 Project: ORD Changes (HSCOrgRefData)
-Internal Ref: v0.1
-Copyright Health and Social Care Information Centre (c) 2018
+Internal Ref: v0.2
+Copyright Health and Social Care Information Centre (c) 2019
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -65,6 +65,7 @@ class APIRetrieve(object):
     def __init__(self):
         '''initialise class vars here '''
 
+        self.apiUri = ""
         self.tree = ""
         self.root = ""
 
@@ -75,7 +76,19 @@ class APIRetrieve(object):
 
         # temp location to store data retrieved from the API
         self.tempOrgListFile = ".\\orglist.xml"
-        self.headerCodeSystemFile = "HeaderCodeSystems.txt"
+        self.headerText = \
+"""<?xml version="1.0" encoding="utf-8"?>
+<HSCOrgRefData:OrgRefData xmlns:HSCOrgRefData="http://refdata.hscic.gov.uk/org/v2-0-0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://refdata.hscic.gov.uk/org/v2-0-0 HSCOrgRefData.xsd">
+  <Manifest>
+    <Version value="2-0-0" />
+    <PublicationType value="APISync" />
+    <PublicationSource value="HSCIC" />
+    <PublicationDate value="$Date" />
+    <PublicationSeqNum value="0" />
+    <FileCreationDateTime value="$DateTime" />
+    <RecordCount value="$Records" />
+    <ContentDescription value="HSCOrgRefData_APICall_$Date" />
+    """
         self.outputFile = "APISyncFile_%s.xml" % self.fileTime
         self.logFileName = "APILogFile.log"
         self.recordCount = 0
@@ -86,10 +99,12 @@ class APIRetrieve(object):
         # define the progress that will be reported to the console
         self.progressMarkers = [10, 25, 40, 50, 65, 80, 95, 100]
 
+
     def getSyncData(self, apiUri, LastChangeDate):
         '''
         call to API and store results in temporary tempOrgListFile.xml
         '''
+        self.apiUri = apiUri
         # Open the log file handler
         self.lh = APILog(self.logFileName)
 
@@ -104,7 +119,7 @@ class APIRetrieve(object):
             print( message )
             self.lh.write( message )
             sys.exit()
-        self.apiCall = '%s?LastChangeDate=%s&_format=xml' % (apiUri, LastChangeDate)
+        self.apiCall = '%s?LastChangeDate=%s&_format=xml' % (self.apiUri, LastChangeDate)
         self.lh.write("getSyncData successful")
         try:
 
@@ -122,10 +137,9 @@ class APIRetrieve(object):
             self.rollBack(e.reason, "ignore")
             sys.exit()
 
-
         except OSError.TimeoutError as e:
             self.ex.printException(e)
-            self.lh.write("writeToFile exception %s" % e.reason)
+            self.lh.write("getSyncData exception %s" % e.reason)
             self.rollBack(e.reason, "ignore")
             sys.exit()
 
@@ -161,9 +175,9 @@ class APIRetrieve(object):
     def writeToFile(self):
         '''Read the header and CodeSystems template and then append the retrieved data
         Steps here are:
-        1. open the template file HeaderCodeSystems.txt
-        2. Replace any instances of $DateTime and $Date with sys date and sys time, populate $records
-        3. Write the template text to a new File APISyncFile_<filedate>.xml
+        1. Replace any instances of $DateTime and $Date with sys date and sys time, populate $records in self.headerText
+        2. Write the template text to a new File APISyncFile_<filedate>.xml
+        3. Builds the Primary RoleScope and CodeSystems data from the RecordClass, Roles and Rels Endpoints and updates placeholders in self.headerText
         4. Loops over all records returned from the API and writes those to the file
         5. Appends closing XML content for the tail of the file
         '''
@@ -179,40 +193,55 @@ class APIRetrieve(object):
             print( message )
             self.lh.write( message )
             sys.exit()
-        message = "writeToFile - reading template data from %s" % self.headerCodeSystemFile
-        print( message )
-        self.lh.write( message )
-        #1 open template file
-        output = open(self.outputFile, "w", newline = '')
-        try:
-            headerLines = open(self.headerCodeSystemFile, "r")
-        except FileNotFoundError:
-            # can't pass built-in exception to APIException() so print here instead
-            message = "writeToFile exception - FileNotFound %s" % self.headerCodeSystemFile
-            print(message)
-            self.lh.write(message)
-            self.rollBack(message, output)
-            sys.exit()
 
-        #2 and #3 Write to the output file with substitutions in the manifest
-        message = "writeToFile - writing template manifest and codesystems data to %s" % self.outputFile
-        print( message )
-        self.lh.write( message )
-        for line in headerLines:
-            line.strip() # ditch any whitespace
-            line = line.replace('$DateTime', self.sysTime)
-            line = line.replace('$Date', self.sysDate)
-            line = line.replace('$Records', recordCount)
-            output.write(line)
-        message = "writeToFile - template manifest and codesystems data written to %s" % self.outputFile
-        print( message )
-        self.lh.write( message )
+        message = "writeToFile - writing manifest and codesystems data to %s" % self.outputFile
+        print(message)
+        self.lh.write(message)
+        output = open(self.outputFile, "w", newline = '')
+
+        #1 Write to the output file with substitutions in the manifest
+        self.headerText = self.headerText.replace('$DateTime', self.sysTime)
+        self.headerText  = self.headerText.replace('$Date', self.sysDate)
+        self.headerText  = self.headerText.replace('$Records', recordCount)
+        output.write(self.headerText )
+
+        #Get PrimaryRoleScope
+        baseURL = self.apiUri.split('sync')[0]  # https://directory.spineservices.nhs.uk/ORD/2-0-0/
+        cs = CodeSystems(baseURL)
+        primaryRolesString = cs.getPrimaryRoles()
+
+        ## write all Primary Roles
+        output.write("%s" % primaryRolesString)
+
+        # Close off the Manifest
+        output.write("\t</Manifest>\n")
+        message = "writeToFile - manifest written to %s" % self.outputFile
+        print(message)
+        self.lh.write(message)
+
+        #2 process CodeSystems Data
+
+        ## Write opening element
+        output.write("""\t<CodeSystems>\n""")
+
+        self.writeCodeSystems(cs, baseURL, output)
+        output.write(self.rolesString)
+        output.write(self.relsString)
+        output.write(self.recordClassesString)
+
+        ## Write closing element
+        output.write("""\t</CodeSystems>\n""")
+
+        message = "writeToFile - CodeSystems written to %s" % self.outputFile
+        print(message)
+        self.lh.write(message)
+
         # begin payload
         message = "writeToFile - writing XML payload records to %s" % self.outputFile
         print( message )
         self.lh.write( message )
 
-        output.write("<Organisations>")
+        output.write("\t<Organisations>\n")
 
         #4 loop over returned records
         recordCounter = 0
@@ -229,7 +258,7 @@ class APIRetrieve(object):
                         There is also a single quote at the end that needs removing, hence  -1 in the string indexing below
                         '''
                         xml_record = xml_record[44:-1]
-                        output.write('%s\n' % xml_record)
+                        output.write('\t\t%s\n' % xml_record.replace("""\\'""","&apos;"))
                         recordCounter += 1
                         self.reportProgress(recordCounter, recordCount)
 
@@ -252,7 +281,7 @@ class APIRetrieve(object):
                     sys.exit()
 
         #5 append closing elements
-        output.write("</Organisations>\n")
+        output.write("\t</Organisations>\n")
         output.write("</HSCOrgRefData:OrgRefData>\n")
 
         # close the output file
@@ -286,6 +315,131 @@ class APIRetrieve(object):
             pass
 
 
+    def writeCodeSystems(self, cs, baseURL, output):
+        try:
+            cs = CodeSystems(baseURL)
+            self.rolesString = cs.getCodeSystemsData("roles")
+            self.recordClassesString = cs.getCodeSystemsData("recordclasses")
+            self.relsString = cs.getCodeSystemsData("rels")
+
+        except urllib.error.URLError as e:
+            self.ex.printException(e)
+            self.lh.write("writeToFile exception %s" % e.reason)
+            self.rollBack(e.reason, output)
+            sys.exit()
+
+        except urllib.error.HTTPError as e:
+            self.ex.printException(e)
+            self.lh.write("writeToFile exception %s" % e.reason)
+            self.rollBack(e.reason, output)
+            sys.exit()
+
+        except OSError.TimeoutError as e:
+            self.ex.printException(e)
+            self.lh.write("writeToFile exception %s" % e.reason)
+            self.rollBack(e.reason, output)
+            sys.exit()
+
+
+class CodeSystems:
+    def __init__(self, baseURL):
+        """
+        :param baseURL: for this we are expecting https://directory.spineservices.nhs.uk/ORD/2-0-0/ in Live
+        """
+        self.baseURL = baseURL
+
+    def getPrimaryRoles(self):
+
+        """ Example of Roles data returned from the EndPoint
+
+        <?xml version="1.0" encoding="ISO-8859-1"?>
+        <CodeSystem oid="2.16.840.1.113883.2.1.3.2.4.17.507" name="OrganisationRole">
+            <Roles>
+                <Role>
+                    <id>RO180</id>
+                    <code>180</code>
+                    <displayName>PRIMARY CARE TRUST SITE</displayName>
+                    <primaryRole>true</primaryRole>
+                </Role>
+                <!-- More Roles here -->
+            <Roles>
+        </CodeSystem>
+        """
+        apiURL = "%s%s?_format=xml" % (self.baseURL, "roles")
+
+        print(apiURL)
+        primaryRolesText = "\t<PrimaryRoleScope>\n"
+
+        CSList, Headers = urllib.request.urlretrieve(apiURL)
+        tree = ET.parse(CSList)
+        root = tree.getroot()
+
+        codeDict = {}
+
+        # Build up a dictionary to parse into CodeSystems String
+        for CodeSystem in root:
+            for code in CodeSystem:
+                codeKey = code[0].text
+                codeDict[codeKey] = []
+                for elem in code:
+                    codeDict[codeKey].append(elem.text)
+
+        """example of the dictionary content:
+        {'RO180': ['RO180', '180', 'PRIMARY CARE TRUST SITE', 'true'], 'RO31': ['RO31', '31', 'PPA EPACT SYSTEM', 'false']}
+        """
+
+        #map this into a text
+        for code in codeDict.keys():
+            #print(code)
+            if codeDict[code][3] == 'true': # only return primary
+                """<PrimaryRole id="RO197" displayName="NHS TRUST" />"""
+                primaryRolesText += """\t\t<PrimaryRole id="%s" displayName="%s" />\n""" % ( codeDict[code][0], codeDict[code][2] )
+
+        #close off the element
+        primaryRolesText += "\t</PrimaryRoleScope>\n"
+
+        return primaryRolesText
+
+
+    def getCodeSystemsData(self, CodeSystem):
+
+        apiURL = "%s%s?_format=xml" % (self.baseURL, CodeSystem)
+
+        print(apiURL)
+        codeSystemsText = ""
+
+        CSList, Headers = urllib.request.urlretrieve(apiURL)
+        tree = ET.parse(CSList)
+        root = tree.getroot()
+        # get oid and name:
+        codeSystemBaseDict = root.attrib
+        """The returnrd data from the API looks like this:
+        CodeSystem {'name': 'OrganisationRole', 'oid': '2.16.840.1.113883.2.1.3.2.4.17.507'}
+        """
+        codeSystemsText = """\t<CodeSystem name="%s" oid="%s">\n""" % ( codeSystemBaseDict.get("name"), codeSystemBaseDict.get("oid"))
+
+
+        codeDict = {}
+
+        # Build up a dictionary to parse into CodeSystems String
+        for CodeSystem in root:
+            for code in CodeSystem:
+                codeKey = code[0].text
+                codeDict[codeKey] = []
+                for elem in code:
+                    codeDict[codeKey].append(elem.text)
+
+        """{'RO180': ['RO180', '180', 'PRIMARY CARE TRUST SITE', 'true'], 'RO31': ['RO31', '31', 'PPA EPACT SYSTEM', 'false']}"""
+
+        #map this into a text
+        for code in codeDict.keys():
+            #print(code)
+            codeSystemsText += """\t\t<concept id="%s" code="%s" displayName="%s" />\n""" % ( codeDict[code][0], codeDict[code][1], codeDict[code][2] )
+
+        #close off the element
+        codeSystemsText += "\t</CodeSystem>\n"
+
+        return codeSystemsText
 
 class APIException():
     '''Only responsible for printing the details of exceptions raised'''
