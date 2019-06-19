@@ -1,5 +1,6 @@
 import urllib.request
 import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape
 import datetime, sys, re, os
 
 '''
@@ -385,7 +386,7 @@ class CodeSystems:
             #print(code)
             if codeDict[code][3] == 'true': # only return primary
                 """<PrimaryRole id="RO197" displayName="NHS TRUST" />"""
-                primaryRolesText += """\t\t<PrimaryRole id="%s" displayName="%s" />\n""" % ( codeDict[code][0], codeDict[code][2] )
+                primaryRolesText += """\t\t<PrimaryRole id="%s" displayName="%s" />\n""" % ( codeDict[code][0], escape(codeDict[code][2]) )
 
         #close off the element
         primaryRolesText += "\t</PrimaryRoleScope>\n"
@@ -426,7 +427,7 @@ class CodeSystems:
         #map this into a text
         for code in codeDict.keys():
             #print(code)
-            codeSystemsText += """\t\t<concept id="%s" code="%s" displayName="%s" />\n""" % ( codeDict[code][0], codeDict[code][1], codeDict[code][2] )
+            codeSystemsText += """\t\t<concept id="%s" code="%s" displayName="%s" />\n""" % ( codeDict[code][0], codeDict[code][1], escape(codeDict[code][2]) )
 
         #close off the element
         codeSystemsText += "\t</CodeSystem>\n"
