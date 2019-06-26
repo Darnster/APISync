@@ -11,7 +11,7 @@ ORD XML Schema version: v2-0-0
 Status: Draft
 Author: NHS Digital
 Contact: exeter.helpdesk@nhs.net
-Release Date: 2019-06-12
+Release Date: 2019-06-25
 Project: ORD Changes (HSCOrgRefData)
 Internal Ref: v0.2
 Copyright Health and Social Care Information Centre (c) 2019
@@ -39,8 +39,7 @@ and passes in <LastChangeDate> and "_format=xml" in order to retrieve individual
 XML file which can be passed to the XSLT tools provided by ODS for further processing (e.g. XMLtoCSV or Primary Role Transform).
 
 All records returned from the method getSyncData() are written to the output file via the method writeToFile(), topped and tailed 
-with the headers and CodeSystems content from the template file plus the closing XML elements </Organisations> and 
-</HSCOrgRefData:OrgRefData>.
+with the headers and CodeSystems plus the closing XML elements </Organisations> and </HSCOrgRefData:OrgRefData>.
 
 LOGGING
 All stages of the sync process are logged to a file called "APILog.log"
